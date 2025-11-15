@@ -1,0 +1,59 @@
+# Docker Compose Addition for Location Intelligence Service
+# File: myndy-location/docker-compose.addition.yml
+#
+# Add these services to the root docker-compose.unified.yml
+
+services:
+  # Location Intelligence Service
+  myndy-location:
+    build: ./myndy-location
+    container_name: myndy-location
+    ports:
+      - "8004:8000"
+    environment:
+      - DATABASE_URL=postgresql://location_user:location_password@location-postgres:5432/location_intelligence
+      - MYNDY_API_POSTGRES_URL=postgresql://myndy_user:${POSTGRES_PASSWORD}@myndy-api-postgres:5432/myndy_api
+      - REDIS_URL=redis://redis:6380
+      - API_KEY=${LOCATION_API_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      - location-postgres
+      - redis
+    networks:
+      - myndy-network
+    restart: unless-stopped
+    volumes:
+      - ./myndy-location:/app
+      - location-logs:/app/logs
+
+  # Location Intelligence Database (PostgreSQL + pgvector)
+  location-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: location-postgres
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=location_user
+      - POSTGRES_PASSWORD=location_password
+      - POSTGRES_DB=location_intelligence
+    volumes:
+      - location-postgres-data:/var/lib/postgresql/data
+      - ./myndy-location/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - myndy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U location_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  location-postgres-data:
+    driver: local
+  location-logs:
+    driver: local
+
+networks:
+  myndy-network:
+    external: true
